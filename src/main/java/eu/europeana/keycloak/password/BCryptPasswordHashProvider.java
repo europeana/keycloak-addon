@@ -4,8 +4,11 @@ import org.apache.commons.codec.binary.Base64;
 
 import org.jboss.logging.Logger;
 
+//import org.keycloak.credential.CredentialModel;
+//import org.keycloak.models.UserCredentialModel;
 import org.keycloak.credential.CredentialModel;
 import org.keycloak.models.UserCredentialModel;
+import org.keycloak.models.credential.PasswordCredentialModel;
 import org.keycloak.credential.hash.PasswordHashProvider;
 import org.keycloak.models.PasswordPolicy;
 
@@ -24,31 +27,38 @@ public class BCryptPasswordHashProvider implements PasswordHashProvider  {
     private final String pepper;
 
 
-    public BCryptPasswordHashProvider(String providerId, int logRounds, String pepper) {
+    public BCryptPasswordHashProvider(String providerId, int configuredLogRounds, String pepper) {
         LOG.debug("BCryptPasswordHashProvider created");
         this.providerId     = providerId;
-        this.logRounds      = logRounds;
+        this.logRounds      = configuredLogRounds;
         this.pepper         = pepper;
     }
 
     @Override
-    public boolean policyCheck(PasswordPolicy passwordPolicy, CredentialModel credentialModel) {
+    public boolean policyCheck(PasswordPolicy passwordPolicy, PasswordCredentialModel credentialModel) {
         LOG.debug("BCryptPasswordHashProvider policy check");
-        return passwordPolicy.getHashAlgorithm().equals(credentialModel.getAlgorithm())
-               && (passwordPolicy.getHashIterations() == credentialModel.getHashIterations());
+        int policyHashIterations = passwordPolicy.getHashIterations();
+        if (policyHashIterations == -1) {
+            policyHashIterations = logRounds;
+        }
+
+        return credentialModel.getPasswordCredentialData().getHashIterations() == policyHashIterations
+               && providerId.equals(credentialModel.getPasswordCredentialData().getAlgorithm());
     }
 
     @Override
-    public void encode(String rawPassword, int iterations, CredentialModel credentialModel) {
+    public PasswordCredentialModel encodedCredential(String rawPassword, int iterations) {
+        String encodedPassword = encode(rawPassword, iterations);
+
+        // bcrypt salt is stored as part of the encoded password so no need to store salt separately
+        return PasswordCredentialModel.createFromValues(providerId, new byte[0], iterations, encodedPassword);
+    }
+
+    @Override
+    public String encode(String rawPassword, int iterations) {
         LOG.debug("BCryptPasswordHashProvider encoding password ...");
         String salt     = BCrypt.gensalt(logRounds);
-        String hashedPassword = getHash(rawPassword, salt);
-
-        credentialModel.setAlgorithm(providerId);
-        credentialModel.setType(UserCredentialModel.PASSWORD);
-        credentialModel.setSalt(salt.getBytes(StandardCharsets.UTF_8));
-        credentialModel.setValue(hashedPassword);
-        credentialModel.setHashIterations(iterations);
+        return getHash(rawPassword, salt);
     }
 
     private String getHash(String rawPassword, String salt) {
@@ -60,10 +70,9 @@ public class BCryptPasswordHashProvider implements PasswordHashProvider  {
     }
 
     @Override
-    public boolean verify(String rawPassword, CredentialModel credentialModel) {
+    public boolean verify(String rawPassword, PasswordCredentialModel credentialModel) {
         LOG.debug("BCryptPasswordHashProvider verifying password ...");
-        return getHash(rawPassword, new String(credentialModel.getSalt(), StandardCharsets.UTF_8))
-                .equals(credentialModel.getValue());
+        return BCrypt.checkpw(rawPassword, credentialModel.getPasswordSecretData().getValue());
     }
 
     @Override

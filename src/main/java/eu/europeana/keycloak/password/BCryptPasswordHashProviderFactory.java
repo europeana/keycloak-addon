@@ -21,14 +21,14 @@ public class BCryptPasswordHashProviderFactory implements PasswordHashProviderFa
     private static final int MIN_LOG_ROUNDS = 4;
     private static final int MAX_LOG_ROUNDS = 31;
 
-    private int logRounds = DEFAULT_LOG_ROUNDS;
+    private int configuredLogRounds = DEFAULT_LOG_ROUNDS;
 
     private static final String PEPPER =  "KTY7Alni99sMkVH2rslK";
 
     @Override
     public PasswordHashProvider create(KeycloakSession keycloakSession) {
         LOG.debug("Creating BCryptPasswordHashProvider ...");
-        return new BCryptPasswordHashProvider(ID, logRounds, PEPPER);
+        return new BCryptPasswordHashProvider(ID, configuredLogRounds, PEPPER);
     }
 
     @Override
@@ -36,7 +36,7 @@ public class BCryptPasswordHashProviderFactory implements PasswordHashProviderFa
         LOG.debug("Initialising BCryptPasswordHashProviderFactory ...");
         Integer configLogRounds = scope.getInt("log-rounds");
         if (configLogRounds != null && configLogRounds >= MIN_LOG_ROUNDS && configLogRounds <= MAX_LOG_ROUNDS) {
-            logRounds = configLogRounds;
+            configuredLogRounds = configLogRounds;
         }
     }
 
